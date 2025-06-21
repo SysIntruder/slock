@@ -21,9 +21,12 @@
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xresource.h>
 
 #include "arg.h"
 #include "util.h"
+
+#define LENGTH(X) (sizeof (X) / sizeof(X)[0])
 
 char *argv0;
 
@@ -33,6 +36,7 @@ enum {
 	FAILED,
 	NUMCOLS
 };
+enum resourcetype { XresString };
 
 struct lock {
 	int screen;
@@ -46,6 +50,12 @@ struct xrandr {
 	int evbase;
 	int errbase;
 };
+
+typedef struct {
+	char *name;
+	enum resourcetype type;
+	void *dst;
+} ResourcePref;
 
 #include "config.h"
 
@@ -125,6 +135,49 @@ gethash(void)
 #endif /* HAVE_SHADOW_H */
 
 	return hash;
+}
+
+static void
+loadresource(XrmDatabase db, char *name, enum resourcetype rtype, void *dst)
+{
+	char *sdst = NULL;
+	char fullname[256];
+	char *type;
+	XrmValue ret;
+
+	sdst = dst;
+
+	snprintf(fullname, sizeof(fullname), "%s.%s", "slock", name);
+	fullname[sizeof(fullname) - 1] = '\0';
+
+	XrmGetResource(db, fullname, "*", &type, &ret);
+	if (!(ret.addr == NULL || strncmp("String", type, 64))) {
+		switch (rtype) {
+		case XresString:
+			strcpy(sdst, ret.addr);
+			break;
+		}
+	}
+}
+
+static void
+loadxresources(void)
+{
+	Display *display;
+	char *resm;
+	XrmDatabase db;
+	ResourcePref *p;
+
+	display = XOpenDisplay(NULL);
+	if (display) {
+		resm = XResourceManagerString(display);
+		if (resm) {
+			db = XrmGetStringDatabase(resm);
+			for (p = resources; p < resources + LENGTH(resources); p++)
+				loadresource(db, p->name, p->type, p->dst);
+		}
+	}
+	XCloseDisplay(display);
 }
 
 static void
@@ -352,6 +405,8 @@ main(int argc, char **argv) {
 
 	if (!(dpy = XOpenDisplay(NULL)))
 		die("slock: cannot open display\n");
+	XrmInitialize();
+	loadxresources();
 
 	/* drop privileges */
 	if (setgroups(0, NULL) < 0)
