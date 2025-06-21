@@ -161,23 +161,20 @@ loadresource(XrmDatabase db, char *name, enum resourcetype rtype, void *dst)
 }
 
 static void
-loadxresources(void)
+loadxresources(Display *dpy)
 {
-	Display *display;
 	char *resm;
 	XrmDatabase db;
 	ResourcePref *p;
 
-	display = XOpenDisplay(NULL);
-	if (display) {
-		resm = XResourceManagerString(display);
+	if (dpy) {
+		resm = XResourceManagerString(dpy);
 		if (resm) {
 			db = XrmGetStringDatabase(resm);
 			for (p = resources; p < resources + LENGTH(resources); p++)
 				loadresource(db, p->name, p->type, p->dst);
 		}
 	}
-	XCloseDisplay(display);
 }
 
 static void
@@ -406,7 +403,7 @@ main(int argc, char **argv) {
 	if (!(dpy = XOpenDisplay(NULL)))
 		die("slock: cannot open display\n");
 	XrmInitialize();
-	loadxresources();
+	loadxresources(dpy);
 
 	/* drop privileges */
 	if (setgroups(0, NULL) < 0)
